@@ -19,7 +19,6 @@ def compute_gain(y_value: float, gain_scheme: str) -> float:
         return y_value
     elif gain_scheme == 'exp2':
         return 2 ** y_value - 1
-    pass
 
 
 def dcg(ys_true: Tensor, ys_pred: Tensor, gain_scheme: str) -> float:
