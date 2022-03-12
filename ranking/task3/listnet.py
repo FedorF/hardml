@@ -80,10 +80,7 @@ class Solution:
 
     def _calc_loss(self, batch_ys: torch.FloatTensor,
                    batch_pred: torch.FloatTensor) -> torch.FloatTensor:
-        # loss = torch.nn.functional.cross_entropy(batch_pred, batch_ys)
-        pred_soft = torch.nn.functional.softmax(batch_pred.flatten())
-        true_soft = torch.nn.functional.softmax(batch_ys.flatten())
-        loss = -(batch_ys.flatten() * torch.log(pred_soft)).sum()
+        loss = -(batch_ys * torch.log(batch_pred)).sum()
 
         return loss
 
@@ -91,8 +88,10 @@ class Solution:
         self.model.train()
         for qid in set(self.query_ids_train):
             mask = (self.query_ids_train == qid)
-            batch_pred = self.model(self.X_train[mask])
-            loss = self._calc_loss(self.ys_train[mask], batch_pred)
+            batch_pred = self.model(self.X_train[mask]).flatten()
+            batch_pred = torch.nn.functional.softmax(batch_pred)
+            batch_true = self.ys_train[mask].flatten()
+            loss = self._calc_loss(batch_true, batch_pred)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
