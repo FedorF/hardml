@@ -11,13 +11,8 @@ from typing import List
 class ListNet(torch.nn.Module):
     def __init__(self, num_input_features: int, hidden_dim: int):
         super().__init__()
-        self.first_layer_dim = round((num_input_features - hidden_dim) / 4)
         self.model = torch.nn.Sequential(
-            torch.nn.Linear(num_input_features, self.first_layer_dim),
-            torch.nn.Dropout(),
-            torch.nn.Tanh(),
-            torch.nn.Linear(self.first_layer_dim, hidden_dim),
-            torch.nn.Dropout(),
+            torch.nn.Linear(num_input_features, hidden_dim),
             torch.nn.Sigmoid(),
             torch.nn.Linear(hidden_dim, 1),
         )
@@ -86,9 +81,10 @@ class Solution:
     def _calc_loss(self, batch_ys: torch.FloatTensor,
                    batch_pred: torch.FloatTensor) -> torch.FloatTensor:
         # loss = torch.nn.functional.cross_entropy(batch_pred, batch_ys)
-        pred_soft = torch.nn.functional.softmax(batch_pred)
-        true_soft = torch.nn.functional.softmax(batch_ys)
-        loss = -(true_soft * torch.log(pred_soft)).sum()
+        pred_soft = torch.nn.functional.softmax(batch_pred.flatten())
+        true_soft = torch.nn.functional.softmax(batch_ys.flatten())
+        loss = -(batch_ys.flatten() * torch.log(pred_soft)).sum()
+
         return loss
 
     def _train_one_epoch(self) -> None:
@@ -107,8 +103,9 @@ class Solution:
             ndcgs = []
             for qid in set(self.query_ids_test):
                 mask = (self.query_ids_test == qid)
-                batch_pred = self.model(self.X_test[mask])
-                ndcg = self._ndcg_k(self.ys_test[mask], batch_pred, self.ndcg_top_k)
+                batch_pred = self.model(self.X_test[mask]).flatten()
+                batch_true = self.ys_test[mask].flatten()
+                ndcg = self._ndcg_k(batch_true, batch_pred, self.ndcg_top_k)
                 ndcgs.append(ndcg)
             return np.mean(ndcgs)
 
