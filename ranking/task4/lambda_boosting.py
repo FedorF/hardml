@@ -26,6 +26,7 @@ class Solution:
         self.colsample_bytree = colsample_bytree
         self.trees = []
         self.tree_feat = []
+        self.best_ndcg = 0
 
         self.n_samples = round(self.subsample * self.X_train.shape[0])
         self.n_features = round(self.colsample_bytree * self.X_train.shape[1])
@@ -101,24 +102,25 @@ class Solution:
 
     def fit(self):
         np.random.seed(0)
-        best_ndcg, cut_ind = -1, -1
+
         y_train_pred, y_test_pred = 0 * self.ys_train, 0 * self.ys_test
+        prune_ind = -1
         for i in tqdm(range(self.n_estimators)):
             tree, features = self._train_one_tree(i, y_train_pred)
             y_train_pred += self.lr * torch.FloatTensor(tree.predict(self.X_train[:, features])).unsqueeze(1)
             y_test_pred += self.lr * torch.FloatTensor(tree.predict(self.X_test[:, features])).unsqueeze(1)
 
             ndcg = self._calc_data_ndcg(self.query_ids_test, self.ys_test, y_test_pred)
-            if ndcg > best_ndcg:
-                best_ndcg, cut_ind = ndcg, i+1
+            if ndcg > self.best_ndcg:
+                self.best_ndcg, prune_ind = ndcg, i+1
 
             self.trees.append(tree)
             self.tree_feat.append(features)
 
-            # print(f"\nndcg: {round(ndcg, 4)}\tbest ndcg: {round(best_ndcg, 4)}")
+            # print(f"\nndcg: {round(ndcg, 4)}\tbest ndcg: {round(self.best_ndcg, 4)}")
 
-        self.trees = self.trees[:cut_ind]
-        self.tree_feat = self.tree_feat[:cut_ind]
+        self.trees = self.trees[:prune_ind]
+        self.tree_feat = self.tree_feat[:prune_ind]
 
     def predict(self, data: torch.FloatTensor) -> torch.FloatTensor:
         y_pred = torch.FloatTensor(torch.zeros(list(data.shape)[0])).unsqueeze(1)
