@@ -12,9 +12,9 @@ from tqdm.auto import tqdm
 
 
 class Solution:
-    def __init__(self, n_estimators: int = 100, lr: float = 0.5, ndcg_top_k: int = 10,
-                 subsample: float = 0.6, colsample_bytree: float = 0.9,
-                 max_depth: int = 5, min_samples_leaf: int = 8):
+    def __init__(self, n_estimators: int = 100, lr: float = 0.09, ndcg_top_k: int = 10,
+                 subsample: float = 0.99, colsample_bytree: float = 0.99,
+                 max_depth: int = 5, min_samples_leaf: int = 15):
         self._prepare_data()
 
         self.ndcg_top_k = ndcg_top_k
@@ -78,6 +78,7 @@ class Solution:
         for qid in set(self.query_ids_train):
             mask = (self.query_ids_train == qid)
             lambdas[mask] = self._compute_lambdas(self.ys_train[mask], train_preds[mask])
+
         lambdas = lambdas[samples]
         X_train = self.X_train[samples][:, features]
         tree = DecisionTreeRegressor(random_state=cur_tree_idx,
@@ -112,12 +113,12 @@ class Solution:
 
             ndcg = self._calc_data_ndcg(self.query_ids_test, self.ys_test, y_test_pred)
             if ndcg > self.best_ndcg:
-                self.best_ndcg, prune_ind = ndcg, i+1
+                self.best_ndcg, prune_ind = ndcg, i + 1
 
             self.trees.append(tree)
             self.tree_feat.append(features)
 
-            # print(f"\nndcg: {round(ndcg, 4)}\tbest ndcg: {round(self.best_ndcg, 4)}")
+            print(f"\nndcg: {round(ndcg, 4)}\tbest ndcg: {round(self.best_ndcg, 4)}")
 
         self.trees = self.trees[:prune_ind]
         self.tree_feat = self.tree_feat[:prune_ind]
@@ -131,7 +132,7 @@ class Solution:
 
     def _compute_lambdas(self, y_true: torch.FloatTensor, y_pred: torch.FloatTensor) -> torch.FloatTensor:
         # calculate normalization coefficient
-        ideal_dcg = self._dcg_k(y_true, y_true, -1)
+        ideal_dcg = self._dcg_k(y_true, y_true, len(y_true))
         if ideal_dcg == 0:
             N = 0
         else:
