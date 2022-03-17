@@ -10,3 +10,4 @@ pycparser==2.21
 catboost==0.26.1
 scikit-learn==0.23.1
 tqdm==4.62.3
+hyperopt==0.2.5

@@ -12,9 +12,9 @@ from tqdm.auto import tqdm
 
 
 class Solution:
-    def __init__(self, n_estimators: int = 100, lr: float = 0.09, ndcg_top_k: int = 10,
+    def __init__(self, n_estimators: int = 100, lr: float = 0.9, ndcg_top_k: int = 10,
                  subsample: float = 0.99, colsample_bytree: float = 0.99,
-                 max_depth: int = 5, min_samples_leaf: int = 15):
+                 max_depth: int = 5, min_samples_leaf: int = 100):
         self._prepare_data()
 
         self.ndcg_top_k = ndcg_top_k
@@ -118,8 +118,8 @@ class Solution:
             self.trees.append(tree)
             self.tree_feat.append(features)
 
-            print(f"\nndcg: {round(ndcg, 4)}\tbest ndcg: {round(self.best_ndcg, 4)}")
-
+            # print(f"\nndcg: {round(ndcg, 4)}\tbest ndcg: {round(self.best_ndcg, 4)}")
+        # print(f"best ndcg: {round(self.best_ndcg, 4)}")
         self.trees = self.trees[:prune_ind]
         self.tree_feat = self.tree_feat[:prune_ind]
 
