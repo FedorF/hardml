@@ -12,13 +12,16 @@ class ModelTrainer:
 
     def train(self):
         if self.num_it > 0:
-            self._find_best_model()
+            params = self._find_best_params()
         else:
-            model = Solution(**self.params)
-            model.fit()
-            model.save_model(self.path_to_model)
+            params = self.params
 
-    def _find_best_model(self):
+        print(params)
+        model = Solution(**params)
+        model.fit()
+        model.save_model(self.path_to_model)
+
+    def _find_best_params(self) -> dict:
         """Use hyperopt to find optimal model hyper-parameters."""
 
         def objective(pars):
@@ -28,6 +31,5 @@ class ModelTrainer:
             return estimator.best_ndcg
 
         best_params = hopt.fmin(fn=objective, space=self.param_grid, algo=hopt.tpe.suggest, max_evals=self.num_it)
-        model = Solution(**best_params)
-        model.fit()
-        model.save_model(self.path_to_model)
+
+        return best_params

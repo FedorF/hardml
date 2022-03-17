@@ -5,7 +5,7 @@ from ranking.task4.utils import ModelTrainer
 
 if __name__ == '__main__':
     print('Start Training')
-    trainer = ModelTrainer(PATH_TO_MODEL, PARAMS, PARAM_GRID, -1)
+    trainer = ModelTrainer(PATH_TO_MODEL, PARAMS, PARAM_GRID, num_it=200)
     trainer.train()
     print('Finish Training')
 
@@ -14,5 +14,5 @@ if __name__ == '__main__':
     estimator.load_model(PATH_TO_MODEL)
     y_pred = estimator.predict(estimator.X_test)
     ndcg = estimator._calc_data_ndcg(estimator.query_ids_test, estimator.ys_test, y_pred)
-    print(round(ndcg, 4))
+    print(round(ndcg, 5))
     print('Finish Predict')

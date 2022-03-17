@@ -12,11 +12,10 @@ from tqdm.auto import tqdm
 
 
 class Solution:
-    def __init__(self, n_estimators: int = 100, lr: float = 0.9, ndcg_top_k: int = 10,
+    def __init__(self, n_estimators: int = 100, lr: float = .96, ndcg_top_k: int = 10,
                  subsample: float = 0.99, colsample_bytree: float = 0.99,
-                 max_depth: int = 5, min_samples_leaf: int = 100):
+                 max_depth: int = 7, min_samples_leaf: int = 195):
         self._prepare_data()
-
         self.ndcg_top_k = ndcg_top_k
         self.n_estimators = n_estimators
         self.lr = lr
@@ -27,6 +26,7 @@ class Solution:
         self.trees = []
         self.tree_feat = []
         self.best_ndcg = 0
+        self.prune_ind = -1
 
         self.n_samples = round(self.subsample * self.X_train.shape[0])
         self.n_features = round(self.colsample_bytree * self.X_train.shape[1])
@@ -69,9 +69,8 @@ class Solution:
     def _train_one_tree(self, cur_tree_idx: int,
                         train_preds: torch.FloatTensor
                         ) -> Tuple[DecisionTreeRegressor, np.ndarray]:
-        random.seed(cur_tree_idx)
-        samples = random.sample(np.arange(self.X_train.shape[0]).tolist(), self.n_samples)
-        features = random.sample(np.arange(self.X_train.shape[1]).tolist(), self.n_features)
+        samples = np.random.choice(np.arange(self.X_train.shape[0]).tolist(), self.n_samples, replace=False)
+        features = np.random.choice(np.arange(self.X_train.shape[1]).tolist(), self.n_features, replace=False)
 
         # calculate lambda separately for each query
         lambdas = torch.zeros(list(self.ys_train.shape)[0]).unsqueeze(1)
@@ -105,7 +104,6 @@ class Solution:
         np.random.seed(0)
 
         y_train_pred, y_test_pred = 0 * self.ys_train, 0 * self.ys_test
-        prune_ind = -1
         for i in tqdm(range(self.n_estimators)):
             tree, features = self._train_one_tree(i, y_train_pred)
             y_train_pred += self.lr * torch.FloatTensor(tree.predict(self.X_train[:, features])).unsqueeze(1)
@@ -113,19 +111,20 @@ class Solution:
 
             ndcg = self._calc_data_ndcg(self.query_ids_test, self.ys_test, y_test_pred)
             if ndcg > self.best_ndcg:
-                self.best_ndcg, prune_ind = ndcg, i + 1
+                self.best_ndcg, self.prune_ind = ndcg, i + 1
 
             self.trees.append(tree)
             self.tree_feat.append(features)
 
-            # print(f"\nndcg: {round(ndcg, 4)}\tbest ndcg: {round(self.best_ndcg, 4)}")
-        # print(f"best ndcg: {round(self.best_ndcg, 4)}")
-        self.trees = self.trees[:prune_ind]
-        self.tree_feat = self.tree_feat[:prune_ind]
+            # print(f"\nndcg: {round(ndcg, 5)}\tbest ndcg: {round(self.best_ndcg, 5)}")
+
+        print(f"best ndcg: {round(self.best_ndcg, 5)}")
+        self.trees = self.trees[:self.prune_ind]
+        self.tree_feat = self.tree_feat[:self.prune_ind]
 
     def predict(self, data: torch.FloatTensor) -> torch.FloatTensor:
         y_pred = torch.FloatTensor(torch.zeros(list(data.shape)[0])).unsqueeze(1)
-        for i in tqdm(range(len(self.trees))):
+        for i in tqdm(range(self.prune_ind)):
             y_pred += self.lr * torch.FloatTensor(self.trees[i].predict(data[:, self.tree_feat[i]])).unsqueeze(1)
 
         return y_pred
@@ -203,14 +202,15 @@ class Solution:
         return gain
 
     def save_model(self, path: str):
-        state = {'tree_feat': self.tree_feat, 'trees': self.trees, 'lr': self.lr}
+        model = {'tree_feat': self.tree_feat, 'trees': self.trees, 'lr': self.lr, 'prune_ind': self.prune_ind}
         with open(path, 'wb') as f:
-            pickle.dump(state, f)
+            pickle.dump(model, f)
 
     def load_model(self, path: str):
         with open(path, 'rb') as f:
-            state = pickle.load(f)
+            model = pickle.load(f)
 
-        self.tree_feat = state['tree_feat']
-        self.trees = state['trees']
-        self.lr = state['lr']
+        self.tree_feat = model['tree_feat']
+        self.trees = model['trees']
+        self.lr = model['lr']
+        self.prune_ind = model['prune_ind']

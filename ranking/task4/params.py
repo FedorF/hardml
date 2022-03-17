@@ -1,22 +1,37 @@
 from hyperopt import hp
-import numpy as np
 
 PATH_TO_MODEL = './model.bin'
 
 PARAM_GRID = {
-    'max_depth': hp.choice('max_depth', np.arange(2, 16, 1)),
-    'min_samples_leaf': hp.choice('min_samples_leaf', [1, 3, 5, 7, 10, 15, 20, 30, 50]),
-    'subsample': hp.choice('subsample', np.arange(0.6, 1.0, 0.05)),
-    'colsample_bytree': hp.choice('colsample_bytree', np.arange(0.6, 1.0, 0.05)),
-    'lr': hp.choice('lr', [0.01, 0.5]),
+    'max_depth': hp.uniform('max_depth', 3, 21),
+    'min_samples_leaf': hp.randint('min_samples_leaf', 262) + 2,
+    'subsample': hp.uniform('subsample', .9, .99),
+    'colsample_bytree': hp.uniform('colsample_bytree', .85, .99),
+    'lr': hp.uniform('lr', .05, .999),
+    'n_estimators': 100,
+    'ndcg_top_k': 10,
 }
 
 PARAMS = {
-    'lr': 0.9,
-    'max_depth': 5,
-    'min_samples_leaf': 100,
+    'lr': .96,
+    'max_depth': 7,
+    'min_samples_leaf': 195,
     'subsample': 0.99,
     'colsample_bytree': 0.99,
     'n_estimators': 100,
     'ndcg_top_k': 10,
 }
+# 0.40788
+
+# PARAMS = {
+#     'lr': .95,
+#     'max_depth': 7,
+#     'min_samples_leaf': 190,
+#     'subsample': 0.99,
+#     'colsample_bytree': 0.99,
+#     'n_estimators': 100,
+#     'ndcg_top_k': 10,
+# }
+# иest ndcg: 0.40579
+
+# 0.405
