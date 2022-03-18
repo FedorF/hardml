@@ -132,3 +132,4 @@ dmypy.json
 .idea/
 ranking/.DS_Store
 *.bin
+data/
