@@ -28,7 +28,7 @@ class ModelTrainer:
             estimator = Solution(**pars)
             estimator.fit()
 
-            return estimator.best_ndcg
+            return -estimator.best_ndcg
 
         best_params = hopt.fmin(fn=objective, space=self.param_grid, algo=hopt.tpe.suggest, max_evals=self.num_it)
 

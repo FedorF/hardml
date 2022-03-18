@@ -12,9 +12,9 @@ from tqdm.auto import tqdm
 
 
 class Solution:
-    def __init__(self, n_estimators: int = 100, lr: float = .96, ndcg_top_k: int = 10,
-                 subsample: float = 0.99, colsample_bytree: float = 0.99,
-                 max_depth: int = 7, min_samples_leaf: int = 195):
+    def __init__(self, n_estimators: int = 100, lr: float = .9, ndcg_top_k: int = 10,
+                 subsample: float = .9, colsample_bytree: float = .9,
+                 max_depth: int = 9, min_samples_leaf: int = 9):
         self._prepare_data()
         self.ndcg_top_k = ndcg_top_k
         self.n_estimators = n_estimators
@@ -33,7 +33,6 @@ class Solution:
 
     def _get_data(self) -> List[np.ndarray]:
         train_df, test_df = msrank_10k()
-        # train_df = self._filter_zero_relevance(train_df)
 
         X_train = train_df.drop([0, 1], axis=1).values
         y_train = train_df[0].values
@@ -55,9 +54,6 @@ class Solution:
         self.ys_train = torch.FloatTensor(y_train).unsqueeze(1)
         self.ys_test = torch.FloatTensor(y_test).unsqueeze(1)
 
-    def _filter_zero_relevance(self, data):
-        return data.loc[data[0] > 0]
-
     def _scale_features_in_query_groups(self, inp_feat_array: np.ndarray,
                                         inp_query_ids: np.ndarray) -> np.ndarray:
         for qid in set(inp_query_ids):
@@ -69,6 +65,7 @@ class Solution:
     def _train_one_tree(self, cur_tree_idx: int,
                         train_preds: torch.FloatTensor
                         ) -> Tuple[DecisionTreeRegressor, np.ndarray]:
+        np.random.seed(cur_tree_idx)
         samples = np.random.choice(np.arange(self.X_train.shape[0]).tolist(), self.n_samples, replace=False)
         features = np.random.choice(np.arange(self.X_train.shape[1]).tolist(), self.n_features, replace=False)
 
@@ -116,7 +113,7 @@ class Solution:
             self.trees.append(tree)
             self.tree_feat.append(features)
 
-            # print(f"\nndcg: {round(ndcg, 5)}\tbest ndcg: {round(self.best_ndcg, 5)}")
+            print(f"\nndcg: {round(ndcg, 5)}\tbest ndcg: {round(self.best_ndcg, 5)}")
 
         print(f"best ndcg: {round(self.best_ndcg, 5)}")
         self.trees = self.trees[:self.prune_ind]

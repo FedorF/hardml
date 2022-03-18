@@ -13,25 +13,12 @@ PARAM_GRID = {
 }
 
 PARAMS = {
-    'lr': .96,
-    'max_depth': 7,
-    'min_samples_leaf': 195,
-    'subsample': 0.99,
-    'colsample_bytree': 0.99,
+    'lr': 0.3767074163111257,
+    'max_depth': 15.569075684303327,
+    'min_samples_leaf': 93,
+    'subsample': 0.9158298390219355,
+    'colsample_bytree': 0.9172341375456129,
     'n_estimators': 100,
     'ndcg_top_k': 10,
 }
-# 0.40788
-
-# PARAMS = {
-#     'lr': .95,
-#     'max_depth': 7,
-#     'min_samples_leaf': 190,
-#     'subsample': 0.99,
-#     'colsample_bytree': 0.99,
-#     'n_estimators': 100,
-#     'ndcg_top_k': 10,
-# }
-# иest ndcg: 0.40579
-
-# 0.405
+# best loss: 0.4217832161179494

@@ -5,7 +5,7 @@ from ranking.task4.utils import ModelTrainer
 
 if __name__ == '__main__':
     print('Start Training')
-    trainer = ModelTrainer(PATH_TO_MODEL, PARAMS, PARAM_GRID, num_it=200)
+    trainer = ModelTrainer(PATH_TO_MODEL, PARAMS, PARAM_GRID, num_it=-1)
     trainer.train()
     print('Finish Training')
 
