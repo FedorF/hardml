@@ -17,8 +17,8 @@ class GaussianKernel(torch.nn.Module):
         self.sigma = sigma
 
     def forward(self, x):
-        # допишите ваш код здесь 
-        pass
+        # todo: shoud I sum?
+        return torch.exp(-(x - self.mu) / (2 * self.sigma**2))
 
 
 class KNRM(torch.nn.Module):
@@ -29,7 +29,7 @@ class KNRM(torch.nn.Module):
         self.embeddings = torch.nn.Embedding.from_pretrained(
             torch.FloatTensor(embedding_matrix),
             freeze=freeze_embeddings,
-            padding_idx=0
+            padding_idx=0,
         )
 
         self.kernel_num = kernel_num
@@ -204,9 +204,9 @@ class Solution:
         self.glue_dev_df = self.get_glue_df('dev')
         self.dev_pairs_for_ndcg = self.create_val_pairs(self.glue_dev_df)
         self.min_token_occurancies = min_token_occurancies
-        self.all_tokens = self.get_all_tokens(
-            [self.glue_train_df, self.glue_dev_df], self.min_token_occurancies)
-
+        self.all_tokens = self.get_all_tokens([self.glue_train_df, self.glue_dev_df],
+                                              self.min_token_occurancies,
+                                              )
         self.random_seed = random_seed
         self.emb_rand_uni_bound = emb_rand_uni_bound
         self.freeze_knrm_embeddings = freeze_knrm_embeddings
@@ -221,14 +221,19 @@ class Solution:
             self.glue_train_df)
         self.idx_to_text_mapping_dev = self.get_idx_to_text_mapping(
             self.glue_dev_df)
-        
-        self.val_dataset = ValPairsDataset(self.dev_pairs_for_ndcg, 
-              self.idx_to_text_mapping_dev, 
-              vocab=self.vocab, oov_val=self.vocab['OOV'], 
-              preproc_func=self.simple_preproc)
-        self.val_dataloader = torch.utils.data.DataLoader(
-            self.val_dataset, batch_size=self.dataloader_bs, num_workers=0, 
-            collate_fn=collate_fn, shuffle=False)
+
+        self.val_dataset = ValPairsDataset(self.dev_pairs_for_ndcg,
+                                           self.idx_to_text_mapping_dev,
+                                           vocab=self.vocab,
+                                           oov_val=self.vocab['OOV'],
+                                           preproc_func=self.simple_preproc,
+                                           )
+        self.val_dataloader = torch.utils.data.DataLoader(self.val_dataset,
+                                                          batch_size=self.dataloader_bs,
+                                                          num_workers=0,
+                                                          collate_fn=collate_fn,
+                                                          shuffle=False,
+                                                          )
 
     def get_glue_df(self, partition_type: str) -> pd.DataFrame:
         assert partition_type in ['dev', 'train']
@@ -245,37 +250,72 @@ class Solution:
         return glue_df_fin
 
     def hadle_punctuation(self, inp_str: str) -> str:
-        # допишите ваш код здесь 
-        pass
+        for punct in string.punctuation:
+            inp_str = inp_str.replace(punct, ' ')
+        return inp_str
 
     def simple_preproc(self, inp_str: str) -> List[str]:
-        # допишите ваш код здесь 
-        pass
+        return nltk.word_tokenize(self.hadle_punctuation(inp_str).lower())
     
     def _filter_rare_words(self, vocab: Dict[str, int], min_occurancies: int) -> Dict[str, int]:
-        # допишите ваш код здесь 
-        pass
+        return Counter({k: c for k, c in vocab.items() if c >= min_occurancies})
     
     def get_all_tokens(self, list_of_df: List[pd.DataFrame], min_occurancies: int) -> List[str]:
-        # допишите ваш код здесь 
-        pass
+        vocab = Counter()
+        for df in list_of_df:
+            for col in ['text_left', 'text_right']:
+                for doc in df[col].map(self.simple_preproc).values:
+                    for word in doc:
+                        vocab[word] += 1
+
+        vocab = self._filter_rare_words(vocab, min_occurancies)
+        return list(vocab)
 
     def _read_glove_embeddings(self, file_path: str) -> Dict[str, List[str]]:
-        # допишите ваш код здесь 
-        pass
+        embed = {}
+        with open(file_path) as f:
+            for line in f.readlines():
+                line = line.split(' ')
+                embed[line[0]] = line[1:]
+
+        return embed
 
     def create_glove_emb_from_file(self, file_path: str, inner_keys: List[str],
                                    random_seed: int, rand_uni_bound: float
                                    ) -> Tuple[np.ndarray, Dict[str, int], List[str]]:
-        # допишите ваш код здесь 
-        pass
+        np.random.seed(random_seed)
+
+        glove = self._read_glove_embeddings(file_path)
+        unk_words = ['PAD', 'OOV']
+        vocab = {'PAD': 0, 'OOV': 1}
+
+        dim = len(list(glove.values())[0])
+        oov = np.random.uniform(-rand_uni_bound, rand_uni_bound, dim)
+        emb_matrix = [np.zeros(dim), oov]
+        for i, token in enumerate(inner_keys, start=2):
+            vocab[token] = i
+            if token in glove:
+                vect = np.array([*map(float, glove[token])])
+                emb_matrix.append(vect)
+            else:
+                unk_words.append(token)
+                emb_matrix.append(oov)
+        emb_matrix = np.array(emb_matrix)
+
+        return emb_matrix, vocab, unk_words
 
     def build_knrm_model(self) -> Tuple[torch.nn.Module, Dict[str, int], List[str]]:
-        emb_matrix, vocab, unk_words = self.create_glove_emb_from_file(
-            self.glove_vectors_path, self.all_tokens, self.random_seed, self.emb_rand_uni_bound)
+        emb_matrix, vocab, unk_words = self.create_glove_emb_from_file(self.glove_vectors_path,
+                                                                       self.all_tokens,
+                                                                       self.random_seed,
+                                                                       self.emb_rand_uni_bound,
+                                                                       )
         torch.manual_seed(self.random_seed)
-        knrm = KNRM(emb_matrix, freeze_embeddings=self.freeze_knrm_embeddings,
-                    out_layers=self.knrm_out_mlp, kernel_num=self.knrm_kernel_num)
+        knrm = KNRM(emb_matrix,
+                    freeze_embeddings=self.freeze_knrm_embeddings,
+                    out_layers=self.knrm_out_mlp,
+                    kernel_num=self.knrm_kernel_num,
+                    )
         return knrm, vocab, unk_words
 
     def sample_data_for_train_iter(self, inp_df: pd.DataFrame, seed: int
