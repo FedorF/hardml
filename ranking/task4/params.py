@@ -1,17 +1,17 @@
 from hyperopt import hp
+import numpy as np
 
 PATH_TO_MODEL = './model.bin'
 
 PARAM_GRID = {
-    'max_depth': hp.uniform('max_depth', 3, 21),
-    'min_samples_leaf': hp.randint('min_samples_leaf', 262) + 2,
-    'subsample': hp.uniform('subsample', .9, .99),
-    'colsample_bytree': hp.uniform('colsample_bytree', .85, .99),
-    'lr': hp.uniform('lr', .05, .999),
-    'n_estimators': 100,
     'ndcg_top_k': 10,
+    'max_depth': 1 + hp.randint('max_depth', 8),
+    'n_estimators': 10 + hp.randint('n_estimators', 200),
+    'lr': hp.loguniform('lr', np.log(0.01), np.log(0.9)),
+    'colsample_bytree': hp.uniform('colsample_bytree', 0.2, 0.9),
+    'subsample': hp.uniform('subsample', 0.1, 0.7),
+    'min_samples_leaf': 5 + hp.randint('min_samples_leaf', 50),
 }
-
 PARAMS = {
     'lr': 0.3767074163111257,
     'max_depth': 15.569075684303327,
