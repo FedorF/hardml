@@ -17,8 +17,7 @@ class GaussianKernel(torch.nn.Module):
         self.sigma = sigma
 
     def forward(self, x):
-        # todo: shoud I sum?
-        return torch.exp(-(x - self.mu) / (2 * self.sigma**2))
+        return torch.exp(-(x - self.mu) / (2 * self.sigma ** 2))
 
 
 class KNRM(torch.nn.Module):
@@ -43,14 +42,54 @@ class KNRM(torch.nn.Module):
 
         self.out_activation = torch.nn.Sigmoid()
 
+    def _kernal_mus(self, n_kernels):
+        l_mu = [1.0]
+        if n_kernels == 1:
+            return l_mu
+
+        bin_size = 2.0 / (n_kernels - 1)  # score range from [-1, 1]
+        l_mu.append(1 - bin_size / 2)  # mu: middle of the bin
+        for i in range(1, n_kernels - 1):
+            l_mu.append(l_mu[i] - bin_size)
+
+        return l_mu
+
+    def _kernel_sigmas(self, n_kernels, sigma, exact_sigma, lamb=None):
+        l_sigma = [exact_sigma]  # for exact match. small variance -> exact match
+        if n_kernels == 1:
+            return l_sigma
+
+        # use different sigmas for kernels
+        if lamb:
+            bin_size = 2.0 / (n_kernels - 1)
+            l_sigma += [bin_size * lamb] * (n_kernels - 1)
+        else:
+            for i in range(1, n_kernels):
+                l_sigma.append(sigma)
+
+        return l_sigma
+
     def _get_kernels_layers(self) -> torch.nn.ModuleList:
-        kernels = torch.nn.ModuleList()
-        # допишите ваш код здесь 
+        mus = self._kernal_mus(self.kernel_num)
+        sigmas = self._kernel_sigmas(self.kernel_num, self.sigma, self.exact_sigma)
+        kernels = []
+        for mu, sigma in zip(mus, sigmas):
+            kernels.append(GaussianKernel(mu, sigma))
+
+        kernels = torch.nn.ModuleList(kernels)
         return kernels
 
     def _get_mlp(self) -> torch.nn.Sequential:
-       # допишите ваш код здесь 
-       pass
+        if len(self.out_layers) == 0:
+            return torch.nn.Sequential(torch.nn.Linear(self.kernel_num, 1))
+
+        dims = [self.kernel_num, *self.out_layers, 1]
+        layers = []
+        for i in range(1, len(dims)):
+            layers.append(torch.nn.ReLU())
+            layers.append(torch.nn.Linear(dims[i - 1], dims[i]))
+
+        return torch.nn.Sequential(*layers)
 
     def forward(self, input_1: Dict[str, torch.Tensor], input_2: Dict[str, torch.Tensor]) -> torch.FloatTensor:
         logits_1 = self.predict(input_1)
@@ -62,8 +101,7 @@ class KNRM(torch.nn.Module):
         return out
 
     def _get_matching_matrix(self, query: torch.Tensor, doc: torch.Tensor) -> torch.FloatTensor:
-        # допишите ваш код здесь 
-        pass
+        return F.cosine_similarity(query, doc, dim=2)
 
     def _apply_kernels(self, matching_matrix: torch.FloatTensor) -> torch.FloatTensor:
         KM = []
@@ -79,7 +117,7 @@ class KNRM(torch.nn.Module):
     def predict(self, inputs: Dict[str, torch.Tensor]) -> torch.FloatTensor:
         # shape = [Batch, Left, Embedding], [Batch, Right, Embedding]
         query, doc = inputs['query'], inputs['document']
-        
+
         # shape = [Batch, Left, Right]
         matching_matrix = self._get_matching_matrix(query, doc)
         # shape = [Batch, Kernels]
@@ -256,10 +294,10 @@ class Solution:
 
     def simple_preproc(self, inp_str: str) -> List[str]:
         return nltk.word_tokenize(self.hadle_punctuation(inp_str).lower())
-    
+
     def _filter_rare_words(self, vocab: Dict[str, int], min_occurancies: int) -> Dict[str, int]:
         return Counter({k: c for k, c in vocab.items() if c >= min_occurancies})
-    
+
     def get_all_tokens(self, list_of_df: List[pd.DataFrame], min_occurancies: int) -> List[str]:
         vocab = Counter()
         for df in list_of_df:
@@ -362,18 +400,18 @@ class Solution:
         left_dict = (
             inp_df
             [['id_left', 'text_left']]
-            .drop_duplicates()
-            .set_index('id_left')
+                .drop_duplicates()
+                .set_index('id_left')
             ['text_left']
-            .to_dict()
+                .to_dict()
         )
         right_dict = (
             inp_df
             [['id_right', 'text_right']]
-            .drop_duplicates()
-            .set_index('id_right')
+                .drop_duplicates()
+                .set_index('id_right')
             ['text_right']
-            .to_dict()
+                .to_dict()
         )
         left_dict.update(right_dict)
         return left_dict
@@ -385,7 +423,7 @@ class Solution:
     def valid(self, model: torch.nn.Module, val_dataloader: torch.utils.data.DataLoader) -> float:
         labels_and_groups = val_dataloader.dataset.index_pairs_or_triplets
         labels_and_groups = pd.DataFrame(labels_and_groups, columns=['left_id', 'right_id', 'rel'])
-        
+
         all_preds = []
         for batch in (val_dataloader):
             inp_1, y = batch
@@ -394,7 +432,7 @@ class Solution:
             all_preds.append(preds_np)
         all_preds = np.concatenate(all_preds, axis=0)
         labels_and_groups['preds'] = all_preds
-        
+
         ndcgs = []
         for cur_id in labels_and_groups.left_id.unique():
             cur_df = labels_and_groups[labels_and_groups.left_id == cur_id]
