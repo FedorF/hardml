@@ -142,12 +142,12 @@ class RankingDataset(torch.utils.data.Dataset):
         return len(self.index_pairs_or_triplets)
 
     def _tokenized_text_to_index(self, tokenized_text: List[str]) -> List[int]:
-        # допишите ваш код здесь 
-        pass
+        return [self.vocab.get(word, self.oov_val) for word in tokenized_text]
 
     def _convert_text_idx_to_token_idxs(self, idx: int) -> List[int]:
-        # допишите ваш код здесь 
-        pass
+        text = self.idx_to_text_mapping[str(idx)]  # todo: mb change to int
+        text = self.preproc_func(text)
+        return self._tokenized_text_to_index(text)
 
     def __getitem__(self, idx: int):
         pass
@@ -155,14 +155,24 @@ class RankingDataset(torch.utils.data.Dataset):
 
 class TrainTripletsDataset(RankingDataset):
     def __getitem__(self, idx):
-        # допишите ваш код здесь 
-        pass
+        id_q, id_l, id_r, target = self.index_pairs_or_triplets[idx]
+        tokens_query = self._convert_text_idx_to_token_idxs(id_q)
+        tokens_l = self._convert_text_idx_to_token_idxs(id_l)
+        tokens_r = self._convert_text_idx_to_token_idxs(id_r)
+        sample1 = {'query': tokens_query, 'document': tokens_l}
+        sample2 = {'query': tokens_query, 'document': tokens_r}
+
+        return sample1, sample2, target
 
 
 class ValPairsDataset(RankingDataset):
     def __getitem__(self, idx):
-        # допишите ваш код здесь 
-        pass
+        id_l, id_r, target = self.index_pairs_or_triplets[idx]
+        tokens_l = self._convert_text_idx_to_token_idxs(id_l)
+        tokens_r = self._convert_text_idx_to_token_idxs(id_r)
+        sample = {'query': tokens_l, 'document': tokens_r}
+
+        return sample, target
 
 
 def collate_fn(batch_objs: List[Union[Dict[str, torch.Tensor], torch.FloatTensor]]):
@@ -400,32 +410,46 @@ class Solution:
         left_dict = (
             inp_df
             [['id_left', 'text_left']]
-                .drop_duplicates()
-                .set_index('id_left')
+            .drop_duplicates()
+            .set_index('id_left')
             ['text_left']
-                .to_dict()
+            .to_dict()
         )
         right_dict = (
             inp_df
             [['id_right', 'text_right']]
-                .drop_duplicates()
-                .set_index('id_right')
+            .drop_duplicates()
+            .set_index('id_right')
             ['text_right']
-                .to_dict()
+            .to_dict()
         )
         left_dict.update(right_dict)
         return left_dict
 
+    def _dcg_k(self, ys_true: np.array, ys_pred: np.array, top_k: int) -> float:
+        indices = np.argsort(ys_pred)
+        ind = min((len(ys_true), top_k))
+        ys_true_sorted = ys_true[indices][:ind]
+        gain = 0
+        for i, y in enumerate(ys_true_sorted, start=1):
+            gain += (2 ** y - 1) / math.log2(i + 1)
+
+        return gain
+
     def ndcg_k(self, ys_true: np.array, ys_pred: np.array, ndcg_top_k: int = 10) -> float:
-        # допишите ваш код здесь  (обратите внимание, что используются вектора numpy)
-        pass
+        ideal_dcg = self._dcg_k(ys_true, ys_true, ndcg_top_k)
+        dcg = self._dcg_k(ys_true, ys_pred, ndcg_top_k)
+        if ideal_dcg == 0:
+            return 0
+        else:
+            return dcg / ideal_dcg
 
     def valid(self, model: torch.nn.Module, val_dataloader: torch.utils.data.DataLoader) -> float:
         labels_and_groups = val_dataloader.dataset.index_pairs_or_triplets
         labels_and_groups = pd.DataFrame(labels_and_groups, columns=['left_id', 'right_id', 'rel'])
 
         all_preds = []
-        for batch in (val_dataloader):
+        for batch in val_dataloader:
             inp_1, y = batch
             preds = model.predict(inp_1)
             preds_np = preds.detach().numpy()
@@ -446,5 +470,20 @@ class Solution:
     def train(self, n_epochs: int):
         opt = torch.optim.SGD(self.model.parameters(), lr=self.train_lr)
         criterion = torch.nn.BCELoss()
-        # допишите ваш код здесь 
-        pass
+        for i in range(n_epochs):
+            self.model.train()
+
+            batch = ''  # todo
+            batch_true = ''  # todo
+
+            batch_pred = self.model(batch)
+            loss = criterion(batch_true, batch_pred)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+
+            ndcg = self.valid(self.model, self.val_dataloader)
+            print(f'epoch:{i+1}\tloss: {round(loss, 4)}\tndcg: {round(ndcg, 5)}')
+            if ndcg > 0.925:
+                print('Just Beat It!')
+                break
