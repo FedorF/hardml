@@ -366,10 +366,41 @@ class Solution:
                     )
         return knrm, vocab, unk_words
 
-    def sample_data_for_train_iter(self, inp_df: pd.DataFrame, seed: int
-                                   ) -> List[List[Union[str, float]]]:
-        # допишите ваш код здесь 
-        pass
+    def _gen_pairs(self, list1, list2):
+        return ((x, y) for x in list1 for y in list2)
+
+    def sample_data_for_train_iter(self, inp_df: pd.DataFrame, seed: int) -> List[List[Union[str, float]]]:
+        fill_top_to = 15
+        min_group_size = 2
+
+        inp_df = inp_df[['id_left', 'id_right', 'label']]
+        all_ids = set(inp_df['id_left']).union(set(inp_df['id_right']))
+
+        group_size = inp_df.groupby('id_left').size()
+        left_ind_to_use = group_size[group_size >= min_group_size].index.tolist()
+        groups = inp_df[inp_df['id_left'].isin(left_ind_to_use)].groupby('id_left')
+
+        np.random.seed(seed)
+
+        out_pairs = []
+        for id_left, group in groups:
+            ones_ids = group[group.label == 1].id_right.values
+            zeroes_ids = group[group.label == 0].id_right.values
+            sum_len = len(ones_ids) + len(zeroes_ids)
+            num_pad_items = max(0, fill_top_to - sum_len)
+            if num_pad_items > 0:
+                cur_chosen = set(ones_ids).union(set(zeroes_ids)).union(set(id_left))
+                pad_sample = np.random.choice(list(all_ids - cur_chosen), num_pad_items, replace=False).tolist()
+            else:
+                pad_sample = []
+            for doc1, doc2 in self._gen_pairs(ones_ids, zeroes_ids):
+                out_pairs.append([id_left, doc1, doc2, 1.0] if np.random.rand() > 0.5 else [id_left, doc2, doc1, 0.0])
+            for doc1, doc2 in self._gen_pairs(ones_ids, pad_sample):
+                out_pairs.append([id_left, doc1, doc2, 1.0] if np.random.rand() > 0.5 else [id_left, doc2, doc1, 0.0])
+            for doc1, doc2 in self._gen_pairs(zeroes_ids, pad_sample):
+                out_pairs.append([id_left, doc1, doc2, 1.0] if np.random.rand() > 0.5 else [id_left, doc2, doc1, 0.0])
+
+        return out_pairs
 
     def create_val_pairs(self, inp_df: pd.DataFrame, fill_top_to: int = 15,
                          min_group_size: int = 2, seed: int = 0) -> List[List[Union[str, float]]]:
@@ -465,25 +496,50 @@ class Solution:
                 ndcgs.append(0)
             else:
                 ndcgs.append(ndcg)
+
         return np.mean(ndcgs)
+
+    def _change_train_loader(self, epoch_num):
+        triplets = self.sample_data_for_train_iter(self.glue_train_df, epoch_num)
+        train_dataset = TrainTripletsDataset(triplets,
+                                             self.idx_to_text_mapping_train,
+                                             vocab=self.vocab,
+                                             oov_val=self.vocab['OOV'],
+                                             preproc_func=self.simple_preproc,
+                                             )
+        train_dataloader = torch.utils.data.DataLoader(train_dataset,
+                                                       batch_size=self.dataloader_bs,
+                                                       num_workers=0,
+                                                       collate_fn=collate_fn,
+                                                       shuffle=False,
+                                                       )
+        return train_dataloader
 
     def train(self, n_epochs: int):
         opt = torch.optim.SGD(self.model.parameters(), lr=self.train_lr)
         criterion = torch.nn.BCELoss()
-        for i in range(n_epochs):
+        train_dataloader = self._change_train_loader(0)
+        for epoch in range(n_epochs):
+            cur_loss = 0
+            if epoch % self.change_train_loader_ep == 0:
+                train_dataloader = self._change_train_loader(epoch)
+
             self.model.train()
+            for batch in train_dataloader:
+                doc1, doc2, batch_true = batch
+                batch_pred = self.model(doc1, doc2)
+                loss = criterion(batch_pred, batch_true)
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
 
-            batch = ''  # todo
-            batch_true = ''  # todo
+                cur_loss += loss.item()
 
-            batch_pred = self.model(batch)
-            loss = criterion(batch_true, batch_pred)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+            print(f'epoch:{epoch + 1}\tloss: {round(cur_loss, 4)}')
 
-            ndcg = self.valid(self.model, self.val_dataloader)
-            print(f'epoch:{i+1}\tloss: {round(loss, 4)}\tndcg: {round(ndcg, 5)}')
-            if ndcg > 0.925:
-                print('Just Beat It!')
-                break
+            if epoch % 3 == 0:
+                ndcg = self.valid(self.model, self.val_dataloader)
+                print(f'epoch:{epoch+1}\tloss: {round(cur_loss, 4)}\tndcg: {round(ndcg, 5)}')
+                if ndcg > 0.925:
+                    print('Just Beat It!')
+                    break
