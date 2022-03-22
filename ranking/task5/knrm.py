@@ -10,6 +10,12 @@ import torch
 import torch.nn.functional as F
 
 
+# Замените пути до директорий и файлов! Можете использовать для локальной отладки.
+# При проверке на сервере пути будут изменены
+glue_qqp_dir = '/data/QQP/'
+glove_path = '/data/glove.6B.50d.txt'
+
+
 class GaussianKernel(torch.nn.Module):
     def __init__(self, mu: float = 1., sigma: float = 1.):
         super().__init__()
