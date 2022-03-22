@@ -8,6 +8,8 @@ import math
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from tqdm.auto import tqdm  # todo: remove
+
 
 
 # Замените пути до директорий и файлов! Можете использовать для локальной отладки.
@@ -23,7 +25,7 @@ class GaussianKernel(torch.nn.Module):
         self.sigma = sigma
 
     def forward(self, x):
-        return torch.exp(-(x - self.mu) / (2 * self.sigma ** 2))
+        return torch.exp(-(x - self.mu) ** 2 / (2 * self.sigma ** 2))
 
 
 class KNRM(torch.nn.Module):
@@ -100,14 +102,21 @@ class KNRM(torch.nn.Module):
     def forward(self, input_1: Dict[str, torch.Tensor], input_2: Dict[str, torch.Tensor]) -> torch.FloatTensor:
         logits_1 = self.predict(input_1)
         logits_2 = self.predict(input_2)
-
         logits_diff = logits_1 - logits_2
 
         out = self.out_activation(logits_diff)
+
         return out
 
     def _get_matching_matrix(self, query: torch.Tensor, doc: torch.Tensor) -> torch.FloatTensor:
-        return F.cosine_similarity(query, doc, dim=2)
+        query = self.embeddings(query)
+        doc = self.embeddings(doc)
+
+        query /= query.norm(p=2, dim=-1, keepdim=True) + 1e-10
+        doc /= doc.norm(p=2, dim=-1, keepdim=True) + 1e-10
+        doc = doc.transpose(-1, -2)
+
+        return torch.bmm(query, doc)
 
     def _apply_kernels(self, matching_matrix: torch.FloatTensor) -> torch.FloatTensor:
         KM = []
@@ -128,6 +137,7 @@ class KNRM(torch.nn.Module):
         matching_matrix = self._get_matching_matrix(query, doc)
         # shape = [Batch, Kernels]
         kernels_out = self._apply_kernels(matching_matrix)
+
         # shape = [Batch]
         out = self.mlp(kernels_out)
         return out
@@ -151,7 +161,7 @@ class RankingDataset(torch.utils.data.Dataset):
         return [self.vocab.get(word, self.oov_val) for word in tokenized_text]
 
     def _convert_text_idx_to_token_idxs(self, idx: int) -> List[int]:
-        text = self.idx_to_text_mapping[str(idx)]  # todo: mb change to int
+        text = self.idx_to_text_mapping[str(idx)]
         text = self.preproc_func(text)
         return self._tokenized_text_to_index(text)
 
@@ -254,7 +264,7 @@ class Solution:
                  ):
         self.glue_qqp_dir = glue_qqp_dir
         self.glove_vectors_path = glove_vectors_path
-        self.glue_train_df = self.get_glue_df('train')
+        self.glue_train_df = self.get_glue_df('train')  # todo: change to train
         self.glue_dev_df = self.get_glue_df('dev')
         self.dev_pairs_for_ndcg = self.create_val_pairs(self.glue_dev_df)
         self.min_token_occurancies = min_token_occurancies
@@ -376,7 +386,7 @@ class Solution:
         return ((x, y) for x in list1 for y in list2)
 
     def sample_data_for_train_iter(self, inp_df: pd.DataFrame, seed: int) -> List[List[Union[str, float]]]:
-        fill_top_to = 15
+        fill_top_to = -1  # todo: vary
         min_group_size = 2
 
         inp_df = inp_df[['id_left', 'id_right', 'label']]
@@ -389,7 +399,8 @@ class Solution:
         np.random.seed(seed)
 
         out_pairs = []
-        for id_left, group in groups:
+        print('start sampling triplets for train dataset\n')
+        for id_left, group in tqdm(groups):  # todo
             ones_ids = group[group.label == 1].id_right.values
             zeroes_ids = group[group.label == 0].id_right.values
             sum_len = len(ones_ids) + len(zeroes_ids)
@@ -505,8 +516,10 @@ class Solution:
 
         return np.mean(ndcgs)
 
-    def _change_train_loader(self, epoch_num):
+    def _get_train_loader(self, epoch_num):
+        print(f'df_size={self.glue_train_df.shape}\n')
         triplets = self.sample_data_for_train_iter(self.glue_train_df, epoch_num)
+        print(f'triplets_size={len(triplets)}\n')
         train_dataset = TrainTripletsDataset(triplets,
                                              self.idx_to_text_mapping_train,
                                              vocab=self.vocab,
@@ -524,28 +537,30 @@ class Solution:
     def train(self, n_epochs: int):
         opt = torch.optim.SGD(self.model.parameters(), lr=self.train_lr)
         criterion = torch.nn.BCELoss()
-        train_dataloader = self._change_train_loader(0)
-        for epoch in range(n_epochs):
+        print('Start Training\n')
+        print('Init train dataloader\n')
+        train_dataloader = self._get_train_loader(0)
+        for epoch in range(1, n_epochs+1):
             cur_loss = 0
             if epoch % self.change_train_loader_ep == 0:
-                train_dataloader = self._change_train_loader(epoch)
+                train_dataloader = self._get_train_loader(epoch)
 
             self.model.train()
-            for batch in train_dataloader:
+            print('Start batch fit\n')
+            for batch in tqdm(train_dataloader):  # todo
                 doc1, doc2, batch_true = batch
                 batch_pred = self.model(doc1, doc2)
                 loss = criterion(batch_pred, batch_true)
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
-
                 cur_loss += loss.item()
 
-            print(f'epoch:{epoch + 1}\tloss: {round(cur_loss, 4)}')
+            print(f'\nepoch:{epoch}\tloss: {round(cur_loss, 4)}')
 
             if epoch % 3 == 0:
                 ndcg = self.valid(self.model, self.val_dataloader)
-                print(f'epoch:{epoch+1}\tloss: {round(cur_loss, 4)}\tndcg: {round(ndcg, 5)}')
+                print(f'\nepoch:{epoch}\tloss: {round(cur_loss, 4)}\tndcg: {round(ndcg, 5)}')
                 if ndcg > 0.925:
                     print('Just Beat It!')
                     break
