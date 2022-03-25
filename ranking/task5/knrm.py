@@ -8,8 +8,6 @@ import math
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from tqdm.auto import tqdm  # todo: remove
-
 
 
 # Замените пути до директорий и файлов! Можете использовать для локальной отладки.
@@ -399,8 +397,7 @@ class Solution:
         np.random.seed(seed)
 
         out_pairs = []
-        print('start sampling triplets for train dataset\n')
-        for id_left, group in tqdm(groups):  # todo
+        for id_left, group in groups:
             ones_ids = group[group.label == 1].id_right.values
             zeroes_ids = group[group.label == 0].id_right.values
             sum_len = len(ones_ids) + len(zeroes_ids)
@@ -517,9 +514,7 @@ class Solution:
         return np.mean(ndcgs)
 
     def _get_train_loader(self, epoch_num):
-        print(f'df_size={self.glue_train_df.shape}\n')
         triplets = self.sample_data_for_train_iter(self.glue_train_df, epoch_num)
-        print(f'triplets_size={len(triplets)}\n')
         train_dataset = TrainTripletsDataset(triplets,
                                              self.idx_to_text_mapping_train,
                                              vocab=self.vocab,
@@ -530,24 +525,22 @@ class Solution:
                                                        batch_size=self.dataloader_bs,
                                                        num_workers=0,
                                                        collate_fn=collate_fn,
-                                                       shuffle=False,
+                                                       shuffle=True,
                                                        )
         return train_dataloader
 
     def train(self, n_epochs: int):
         opt = torch.optim.SGD(self.model.parameters(), lr=self.train_lr)
         criterion = torch.nn.BCELoss()
-        print('Start Training\n')
-        print('Init train dataloader\n')
+
+        ndcg = 0
         train_dataloader = self._get_train_loader(0)
         for epoch in range(1, n_epochs+1):
             cur_loss = 0
             if epoch % self.change_train_loader_ep == 0:
                 train_dataloader = self._get_train_loader(epoch)
 
-            self.model.train()
-            print('Start batch fit\n')
-            for batch in tqdm(train_dataloader):  # todo
+            for batch in train_dataloader:
                 doc1, doc2, batch_true = batch
                 batch_pred = self.model(doc1, doc2)
                 loss = criterion(batch_pred, batch_true)
@@ -556,11 +549,10 @@ class Solution:
                 opt.step()
                 cur_loss += loss.item()
 
-            print(f'\nepoch:{epoch}\tloss: {round(cur_loss, 4)}')
-
-            if epoch % 3 == 0:
+            if epoch % 4 == 0:
                 ndcg = self.valid(self.model, self.val_dataloader)
-                print(f'\nepoch:{epoch}\tloss: {round(cur_loss, 4)}\tndcg: {round(ndcg, 5)}')
-                if ndcg > 0.925:
-                    print('Just Beat It!')
-                    break
+
+            print(f'\nepoch:{epoch}\tloss: {round(cur_loss, 4)}\tndcg: {round(ndcg, 5)}')
+            if ndcg > 0.925:
+                print('Just Beat It!')
+                break
