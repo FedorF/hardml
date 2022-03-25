@@ -475,7 +475,7 @@ class Solution:
         return left_dict
 
     def _dcg_k(self, ys_true: np.array, ys_pred: np.array, top_k: int) -> float:
-        indices = np.argsort(ys_pred)
+        indices = np.argsort(ys_pred)[::-1]
         ind = min((len(ys_true), top_k))
         ys_true_sorted = ys_true[indices][:ind]
         gain = 0
