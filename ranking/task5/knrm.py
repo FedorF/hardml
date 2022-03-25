@@ -58,9 +58,10 @@ class KNRM(torch.nn.Module):
         bin_size = 2.0 / (n_kernels - 1)  # score range from [-1, 1]
         l_mu.append(1 - bin_size / 2)  # mu: middle of the bin
         for i in range(1, n_kernels - 1):
-            l_mu.append(l_mu[i] - bin_size)
+            mu = round(l_mu[i] - bin_size, 5)
+            l_mu.append(mu)
 
-        return l_mu
+        return list(reversed(l_mu))
 
     def _kernel_sigmas(self, n_kernels, sigma, exact_sigma, lamb=None):
         l_sigma = [exact_sigma]  # for exact match. small variance -> exact match
@@ -75,7 +76,7 @@ class KNRM(torch.nn.Module):
             for i in range(1, n_kernels):
                 l_sigma.append(sigma)
 
-        return l_sigma
+        return list(reversed(l_sigma))
 
     def _get_kernels_layers(self) -> torch.nn.ModuleList:
         mus = self._kernal_mus(self.kernel_num)
@@ -264,7 +265,7 @@ class Solution:
                  ):
         self.glue_qqp_dir = glue_qqp_dir
         self.glove_vectors_path = glove_vectors_path
-        self.glue_train_df = self.get_glue_df('train')  # todo: change to train
+        self.glue_train_df = self.get_glue_df('dev')  # todo: change to train
         self.glue_dev_df = self.get_glue_df('dev')
         self.dev_pairs_for_ndcg = self.create_val_pairs(self.glue_dev_df)
         self.min_token_occurancies = min_token_occurancies
@@ -319,10 +320,12 @@ class Solution:
         return inp_str
 
     def simple_preproc(self, inp_str: str) -> List[str]:
-        return nltk.word_tokenize(self.hadle_punctuation(inp_str).lower())
+        inp_str = self.hadle_punctuation(inp_str.lower())
+        inp_str = inp_str.strip()
+        return nltk.word_tokenize(inp_str)
 
     def _filter_rare_words(self, vocab: Dict[str, int], min_occurancies: int) -> Dict[str, int]:
-        return Counter({k: c for k, c in vocab.items() if c >= min_occurancies})
+        return {k: c for k, c in vocab.items() if c >= min_occurancies}
 
     def get_all_tokens(self, list_of_df: List[pd.DataFrame], min_occurancies: int) -> List[str]:
         vocab = Counter()
@@ -350,20 +353,22 @@ class Solution:
         np.random.seed(random_seed)
 
         glove = self._read_glove_embeddings(file_path)
-        unk_words = ['PAD', 'OOV']
-        vocab = {'PAD': 0, 'OOV': 1}
+        glove_tokens, inner_tokens = set(glove), set(inner_keys)
+
+        unk_words = ['PAD', 'OOV'] + list(inner_tokens.difference(glove_tokens))
 
         dim = len(list(glove.values())[0])
         oov = np.random.uniform(-rand_uni_bound, rand_uni_bound, dim)
         emb_matrix = [np.zeros(dim), oov]
-        for i, token in enumerate(inner_keys, start=2):
+
+        vocab = {'PAD': 0, 'OOV': 1}
+        # all_tokens = glove_tokens.union(inner_tokens)
+        for i, token in enumerate(inner_tokens, start=2):
             vocab[token] = i
-            if token in glove:
-                vect = np.array([*map(float, glove[token])])
-                emb_matrix.append(vect)
-            else:
-                unk_words.append(token)
-                emb_matrix.append(oov)
+            vect = glove.get(token, oov)
+            vect = np.array(list(map(float, vect)))
+            emb_matrix.append(vect)
+
         emb_matrix = np.array(emb_matrix)
 
         return emb_matrix, vocab, unk_words
