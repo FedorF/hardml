@@ -27,5 +27,4 @@ def _kernel_sigmas(n_kernels, sigma, exact_sigma, lamb=None):
 
 
 if __name__ == '__main__':
-    # run_solution()
-    print(list(map(int, _kernel_sigmas(21, sigma= 0.1, exact_sigma= 0.001,))))
+    run_solution()

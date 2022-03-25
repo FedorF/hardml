@@ -265,7 +265,7 @@ class Solution:
                  ):
         self.glue_qqp_dir = glue_qqp_dir
         self.glove_vectors_path = glove_vectors_path
-        self.glue_train_df = self.get_glue_df('dev')  # todo: change to train
+        self.glue_train_df = self.get_glue_df('train')  # todo: change to train
         self.glue_dev_df = self.get_glue_df('dev')
         self.dev_pairs_for_ndcg = self.create_val_pairs(self.glue_dev_df)
         self.min_token_occurancies = min_token_occurancies
@@ -328,15 +328,16 @@ class Solution:
         return {k: c for k, c in vocab.items() if c >= min_occurancies}
 
     def get_all_tokens(self, list_of_df: List[pd.DataFrame], min_occurancies: int) -> List[str]:
-        vocab = Counter()
+        corpus = []
         for df in list_of_df:
             for col in ['text_left', 'text_right']:
-                for doc in df[col].map(self.simple_preproc).values:
-                    for word in doc:
-                        vocab[word] += 1
-
-        vocab = self._filter_rare_words(vocab, min_occurancies)
-        return list(vocab)
+                for doc in df[col].values:
+                    corpus.append(doc)
+        corpus = ' '.join(set(corpus))
+        corpus = self.simple_preproc(corpus)
+        corpus = Counter(corpus)
+        corpus = self._filter_rare_words(corpus, min_occurancies)
+        return list(corpus)
 
     def _read_glove_embeddings(self, file_path: str) -> Dict[str, List[str]]:
         embed = {}
@@ -362,7 +363,6 @@ class Solution:
         emb_matrix = [np.zeros(dim), oov]
 
         vocab = {'PAD': 0, 'OOV': 1}
-        # all_tokens = glove_tokens.union(inner_tokens)
         for i, token in enumerate(inner_tokens, start=2):
             vocab[token] = i
             vect = glove.get(token, oov)
@@ -370,7 +370,6 @@ class Solution:
             emb_matrix.append(vect)
 
         emb_matrix = np.array(emb_matrix)
-
         return emb_matrix, vocab, unk_words
 
     def build_knrm_model(self) -> Tuple[torch.nn.Module, Dict[str, int], List[str]]:
