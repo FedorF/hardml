@@ -10,10 +10,8 @@ import torch
 import torch.nn.functional as F
 
 
-# Замените пути до директорий и файлов! Можете использовать для локальной отладки.
-# При проверке на сервере пути будут изменены
-glue_qqp_dir = '/data/QQP/'
-glove_path = '/data/glove.6B.50d.txt'
+# glue_qqp_dir = '/data/QQP/'
+# glove_path = '/data/glove.6B.50d.txt'
 
 
 class GaussianKernel(torch.nn.Module):
@@ -108,6 +106,7 @@ class KNRM(torch.nn.Module):
         return out
 
     def _get_matching_matrix(self, query: torch.Tensor, doc: torch.Tensor) -> torch.FloatTensor:
+        # Broadcast to match query and doc lenght
         query = self.embeddings(query).unsqueeze(2)
         doc = self.embeddings(doc).unsqueeze(1)
 
@@ -259,7 +258,7 @@ class Solution:
                  ):
         self.glue_qqp_dir = glue_qqp_dir
         self.glove_vectors_path = glove_vectors_path
-        self.glue_train_df = self.get_glue_df('train')  # todo: change to train
+        self.glue_train_df = self.get_glue_df('train')
         self.glue_dev_df = self.get_glue_df('dev')
         self.dev_pairs_for_ndcg = self.create_val_pairs(self.glue_dev_df)
         self.min_token_occurancies = min_token_occurancies
@@ -384,8 +383,7 @@ class Solution:
         return ((x, y) for x in list1 for y in list2)
 
     def sample_data_for_train_iter(self, inp_df: pd.DataFrame, seed: int) -> List[List[Union[str, float]]]:
-        fill_top_to = -1  # todo: vary
-        min_group_size = 2
+        fill_top_to, min_group_size = -1, 2  # todo: vary
 
         inp_df = inp_df[['id_left', 'id_right', 'label']]
         all_ids = set(inp_df['id_left']).union(set(inp_df['id_right']))
@@ -549,10 +547,10 @@ class Solution:
                 opt.step()
                 cur_loss += loss.item()
 
-            if epoch % 4 == 0:
+            if epoch % 2 == 0:
                 ndcg = self.valid(self.model, self.val_dataloader)
 
             print(f'\nepoch:{epoch}\tloss: {round(cur_loss, 4)}\tndcg: {round(ndcg, 5)}')
-            if ndcg > 0.925:
+            if ndcg >= 0.93:
                 print('Just Beat It!')
                 break
