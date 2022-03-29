@@ -1,11 +1,10 @@
 import numpy as np
 from sklearn.metrics import euclidean_distances
 
-from ranking.task6.nsw import distance, create_sw_graph, nsw
+from ranking.task6.nsw import create_sw_graph, nsw
 
 
 if __name__ == '__main__':
-    a = np.random.randn(1, 10)
-    b = np.random.randn(1000, 10)
-    diff = distance(a, b) - euclidean_distances(a, b).reshape(len(b), -1)
-    assert all(diff) < 1e-5
+    queries, documents = np.random.randn(100, 2), np.random.randn(2000, 2)
+    graph = create_sw_graph(documents, use_sampling=True)
+    knn = nsw(queries, documents, graph)

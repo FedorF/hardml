@@ -19,7 +19,27 @@ def create_sw_graph(data: np.ndarray,
                     sampling_share: float = 0.05,
                     dist_f: Callable = distance,
                     ) -> Dict[int, List[int]]:
-    pass
+    data_size = len(data)
+    sample_size = int(sampling_share * data_size)
+    candidates = np.arange(data_size).flatten()
+
+    graph = {}
+    for i, point in enumerate(data):
+        point = point[np.newaxis, ...]
+        if use_sampling:
+            candidates = np.random.choice(np.arange(data_size).flatten(), sample_size, replace=False)
+
+        indices = dist_f(point, data[candidates]).flatten().argsort()
+        indices = indices[indices != i]
+        short_edges = indices[:num_candidates_for_choice_short]
+        short_edges = np.random.choice(short_edges, num_edges_short, replace=False)
+
+        long_edges = indices[-num_candidates_for_choice_long:]
+        long_edges = np.random.choice(long_edges, num_edges_long, replace=False)
+
+        graph[i] = [*short_edges, *long_edges]
+
+    return graph
 
 
 def nsw(query_point: np.ndarray,
