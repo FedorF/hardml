@@ -5,6 +5,6 @@ from ranking.task6.nsw import create_sw_graph, nsw
 
 
 if __name__ == '__main__':
-    queries, documents = np.random.randn(100, 2), np.random.randn(2000, 2)
+    query, documents = np.random.randn(1, 5), np.random.randn(10000, 5)
     graph = create_sw_graph(documents, use_sampling=True)
-    knn = nsw(queries, documents, graph)
+    knn = nsw(query, documents, graph)
