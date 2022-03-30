@@ -24,7 +24,7 @@ def create_sw_graph(data: np.ndarray,
     candidates = np.arange(data_size).flatten()
 
     graph = {}
-    for i, point in enumerate(data):
+    for i, point in tqdm(enumerate(data)):
         point = point[np.newaxis, ...]
         if use_sampling:
             candidates = np.random.choice(np.arange(data_size).flatten(), sample_size, replace=False)
@@ -49,4 +49,23 @@ def nsw(query_point: np.ndarray,
         num_start_points: int = 5,
         dist_f: Callable = distance,
         ) -> np.ndarray:
-    pass
+    stop_iter = 3  # todo: vary
+    num_start_points = max(num_start_points, search_k)
+    all_nodes = list(graph_edges.keys())
+    start_nodes = np.random.choice(all_nodes, num_start_points, replace=False)
+    knn = []
+    for node in tqdm(start_nodes):
+        # initialize random node and distance to it
+        nn = np.random.randint(0, len(all_documents), 1)[0]
+        min_dist = dist_f(query_point, all_documents[nn]).min()
+        for i in range(stop_iter):
+            edges = graph_edges[node]
+            dists = dist_f(query_point, all_documents[edges])
+            cur_min_dist, edge_min = dists.min(), edges[dists.flatten().argmin()]
+            if cur_min_dist <= min_dist:
+                min_dist = cur_min_dist
+                nn = edge_min
+            node = edge_min
+        knn.append(nn)
+
+    return np.array(knn)
