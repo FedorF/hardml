@@ -4,20 +4,12 @@ import numpy as np
 
 
 class Node:
-    def __init__(self, x, y, t):
-        self.x = x
-        self.y = y
-        self.t = t
-        self.num_samples = len(y)
-        self.num_samples_control = sum(t == 0)
-        self.num_samples_treated = sum(t == 1)
+    def __init__(self, tau):
+        self.tau = tau
         self.feature_index = None
         self.threshold = None
         self.left = None
         self.right = None
-
-    def calc_tau(self) -> float:
-        return np.mean(self.y[self.t == 1]) - np.mean(self.y[self.t == 0])
 
 
 class UpliftTreeRegressor:
@@ -50,42 +42,45 @@ class UpliftTreeRegressor:
 
         return np.unique(percentiles)
 
-    def _calc_delta_p(self, left: Node, right: Node) -> float:
-        return abs(left.calc_tau() - right.calc_tau())
+    def _calc_tau(self, y, t) -> float:
+        return y[t == 1].mean() - y[t == 0].mean()
 
-    def _node_is_valid(self, node):
+    def _split_is_valid(self, t):
         check_ = (
-                (node.num_samples >= self.min_samples_leaf)
-                & (node.num_samples_treated >= self.min_samples_leaf_treated)
-                & (node.num_samples_control >= self.min_samples_leaf_control)
+                (len(t) >= self.min_samples_leaf)
+                & (sum(t == 1) >= self.min_samples_leaf_treated)
+                & (sum(t == 0) >= self.min_samples_leaf_control)
         )
         return check_
 
-    def _best_split(self, node: Node) -> Tuple[Node, Node, int, float]:
+    def _best_split(self, x, y, t) -> Tuple[Node, Node, int, float, np.array]:
         delta_p_opt = -1
-        best_split = (None, None, -1, -1.0)
-        for feat_ind in range(node.x.shape[1]):
-            for threshold in self._get_thresholds(node.x[:, feat_ind]):
-                left_ind = (node.x[:, feat_ind] <= threshold)
-                node_l = Node(node.x[left_ind], node.y[left_ind], node.t[left_ind])
-                node_r = Node(node.x[~left_ind], node.y[~left_ind], node.t[~left_ind])
-                if not self._node_is_valid(node_l) or not self._node_is_valid(node_r):
+        best_split = (None, None, -1, None, None)
+        for feat_ind in range(x.shape[1]):
+            for threshold in self._get_thresholds(x[:, feat_ind]):
+                mask_left = (x[:, feat_ind] <= threshold)
+                if not self._split_is_valid(t[mask_left]) or not self._split_is_valid(t[~mask_left]):
                     continue
-                delta_p = self._calc_delta_p(node_l, node_r)
+
+                tau_l = self._calc_tau(y[mask_left], t[mask_left])
+                tau_r = self._calc_tau(y[~mask_left], t[~mask_left])
+                delta_p = abs(tau_l - tau_r)
                 if delta_p > delta_p_opt:
                     delta_p_opt = delta_p
-                    best_split = (node_l, node_r, feat_ind, threshold)
+                    best_split = (Node(tau_l), Node(tau_r), feat_ind, threshold, mask_left)
 
         return best_split
 
-    def _grow_tree(self, node: Node, depth: int = 0) -> Node:
+    def _grow_tree(self, x, y, t, depth: int = 0) -> Node:
+        node = Node(self._calc_tau(y, t))
+
         if depth < self.max_depth:
-            node_l, node_r, feat_ind, threshold = self._best_split(node)
+            node_l, node_r, feat_ind, threshold, mask_left = self._best_split(x, y, t)
             if feat_ind >= 0:
                 node.feature_index = feat_ind
                 node.threshold = threshold
-                node.left = self._grow_tree(node_l, depth+1)
-                node.right = self._grow_tree(node_r, depth+1)
+                node.left = self._grow_tree(x[mask_left], y[mask_left], t[mask_left], depth+1)
+                node.right = self._grow_tree(x[~mask_left], y[~mask_left], t[~mask_left], depth+1)
 
         return node
 
@@ -97,7 +92,7 @@ class UpliftTreeRegressor:
                 node = node.left
             else:
                 node = node.right
-        return node.calc_tau()
+        return node.tau
 
     def fit(self, X: np.ndarray, treatment: np.ndarray, y: np.ndarray) -> None:
         """
@@ -107,9 +102,7 @@ class UpliftTreeRegressor:
             y - массив (n) с целевой переменной.
 
         """
-
-        base_node = Node(X, y, treatment)
-        self.tree_ = self._grow_tree(base_node)
+        self.tree_ = self._grow_tree(X, y, treatment)
 
     def predict(self, X: np.ndarray) -> Iterable[float]:
         if not self.tree_:
