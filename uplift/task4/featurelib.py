@@ -1,11 +1,11 @@
+from abc import ABC, abstractmethod
+import datetime
+import functools
+from typing import List, Dict
+
+import dask.dataframe as dd
 import sklearn.base as skbase
 import sklearn.pipeline as skpipe
-import functools
-import dask.dataframe as dd
-import datetime
-
-from abc import ABC, abstractmethod
-from typing import List, Dict
 
 
 class Engine:
@@ -50,7 +50,7 @@ def create_calcer(name: str, **kwargs) -> FeatureCalcer:
 
 def join_tables(tables: List[dd.DataFrame], on: List[str], how: str) -> dd.DataFrame:
     result = tables[0]
-    for table in tables[1: ]:
+    for table in tables[1:]:
         result = result.merge(table, on=on, how=how)
     return result
 
