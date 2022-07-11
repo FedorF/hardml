@@ -70,5 +70,5 @@ def calculate_metric_cuped(
     df_pilot = calculate_metric(df, value_name, user_id_name, list_user_id, date_name, periods['pilot'], metric_name)
     df_pilot = df_pilot.merge(df_cov.rename(columns={metric_name: f'{metric_name}_prepilot'}))
     df_pilot[f'{metric_name}_cuped'] = _calc_cuped(df_pilot[metric_name].values, df_pilot[f'{metric_name}_prepilot'])
-    return df_pilot
 
+    return df_pilot

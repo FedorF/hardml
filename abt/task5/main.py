@@ -16,15 +16,15 @@ def generate_data(size, user_num, value_name, user_id_name, date_name):
             'prepilot': {'begin': '2022-07-10', 'end': '2022-07-21'},
             'pilot': {'begin': '2022-07-21', 'end': '2022-07-31'}
         }
+
     return df, list_user_id, periods
 
 
 if __name__ == '__main__':
     df, list_user_id, periods = generate_data(cfg.DATA_SIZE, cfg.USER_NUM, cfg.VALUE_COL, cfg.USER_COL, cfg.TS_COL)
-    print(df.head())
-    print('\n')
-
     df_cuped = (
         cpd.calculate_metric_cuped(df, cfg.VALUE_COL, cfg.USER_COL, list_user_id, cfg.TS_COL, periods, cfg.METRIC_COL)
     )
+    print(df.head())
+    print('\n')
     print(df_cuped.head())
