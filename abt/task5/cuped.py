@@ -2,6 +2,13 @@ import numpy as np
 import pandas as pd
 
 
+def _calc_cuped(y, y_cov):
+    theta = np.cov(y, y_cov)[0, 1] / np.var(y_cov)
+    y_cup = y - theta*y_cov
+
+    return y_cup
+
+
 def calculate_metric(
         df, value_name, user_id_name, list_user_id, date_name, period, metric_name
 ):
@@ -20,7 +27,19 @@ def calculate_metric(
     return - pd.DataFrame, со столбцами [user_id_name, metric_name], кол-во строк должно быть равно
         кол-ву элементов в списке list_user_id.
     """
-    # todo:
+    users = pd.DataFrame({user_id_name: list_user_id})
+    metric = (
+        df
+        .loc[df[user_id_name].isin(list_user_id)
+             & (df[date_name] >= period['begin'])
+             & (df[date_name] < period['end'])]
+        .groupby(user_id_name)[value_name]
+        .sum()
+        .reset_index()
+        .rename(columns={value_name: metric_name})
+    )
+
+    return users.merge(metric, how='left').fillna(0)
 
 
 def calculate_metric_cuped(
@@ -46,4 +65,10 @@ def calculate_metric_cuped(
         [user_id_name, metric_name, f'{metric_name}_prepilot', f'{metric_name}_cuped'],
         кол-во строк должно быть равно кол-ву элементов в списке list_user_id.
     """
-    # todo:
+
+    df_cov = calculate_metric(df, value_name, user_id_name, list_user_id, date_name, periods['prepilot'], metric_name)
+    df_pilot = calculate_metric(df, value_name, user_id_name, list_user_id, date_name, periods['pilot'], metric_name)
+    df_pilot = df_pilot.merge(df_cov.rename(columns={metric_name: f'{metric_name}_prepilot'}))
+    df_pilot[f'{metric_name}_cuped'] = _calc_cuped(df_pilot[metric_name].values, df_pilot[f'{metric_name}_prepilot'])
+    return df_pilot
+
