@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from abt.task5 import cuped as cpd
-from abt.task5 import config as cfg
+from abt.task5 import cuped as cpd, config as cfg
 
 
 def generate_data(size, user_num, value_name, user_id_name, date_name):

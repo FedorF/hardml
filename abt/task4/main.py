@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from abt.task4 import config as cfg
-from abt.task4 import stratification
+from abt.task4 import stratification, config as cfg
 
 
 def calc_strat_weights(df, strat_cols):
