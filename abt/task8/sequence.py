@@ -1,3 +1,7 @@
+import pandas as pd
+import numpy as np
+
+
 class SequentialTester:
     def __init__(
             self, metric_name, time_column_name,
@@ -21,7 +25,10 @@ class SequentialTester:
         self.beta = beta
         self.pdf_one = pdf_one
         self.pdf_two = pdf_two
-        ...
+        self.control = None
+        self.pilot = None
+        self.upper_bound = np.log((1-beta)/alpha)
+        self.lower_bound = np.log(beta/(1-alpha))
 
     def run_test(self, data_control, data_pilot):
         """Запускаем новый тест, проверяет гипотезу о равенстве средних.
@@ -39,7 +46,32 @@ class SequentialTester:
                 кол-во элементов в одном из наборов data_control или data_pilot.
                 Гарантируется, что они равны.
         """
-        ...
+        self.control = data_control
+        self.pilot = data_pilot
+
+        data_control = data_control.sort_values(self.time_column_name)[self.metric_name].values
+        data_pilot = data_pilot.sort_values(self.time_column_name)[self.metric_name].values
+
+        min_len = min([len(data_pilot), len(data_control)])
+
+        data_pilot = data_pilot[:min_len]
+        data_control = data_control[:min_len]
+
+        xs = data_pilot - data_control
+        t = np.cumsum(np.log(self.pdf_two(xs) / self.pdf_one(xs)))
+
+        indexes_lower = np.arange(min_len)[t < self.lower_bound]
+        indexes_upper = np.arange(min_len)[t > self.upper_bound]
+
+        first_index_lower = indexes_lower[0] if len(indexes_lower) > 0 else min_len + 1
+        first_index_upper = indexes_upper[0] if len(indexes_upper) > 0 else min_len + 1
+
+        if first_index_lower < first_index_upper:
+            return 0, first_index_lower + 1
+        elif first_index_lower > first_index_upper:
+            return 1, first_index_upper + 1
+        else:
+            return 0.5, min_len
 
     def add_data(self, data_control, data_pilot):
         """Добавляет новые данные, проверяет гипотезу о равенстве средних.
@@ -59,4 +91,6 @@ class SequentialTester:
                 кол-во элементов в одном из наборов data_control или data_pilot.
                 Гарантируется, что они равны.
         """
-        ...
+        pilot = pd.concat([self.pilot, data_pilot])
+        control = pd.concat([self.control, data_control])
+        return self.run_test(control, pilot)
