@@ -1,0 +1,37 @@
+stages:
+    - build 
+    - test
+    - deploy
+
+
+variables: 
+    VAR1: VAL1
+    VAR2: VAL2
+
+explore_runner:
+    stage: build
+    variables:
+        VAR2: VAL2_REDEFINED
+        ARTIFACT_NAME: artifact_${CI_COMMIT_SHORT_SHA}
+    before_script: 
+        - 'which ssh-agent || ( apt-get install -qq openssh-client )'
+        - eval $(ssh-agent -s)
+        - mkdir -p ~/.ssh
+        - 'echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+        - ssh-add <(echo "$SSH_PRIV_KEY")
+
+    script: 
+        - ssh vlad@84.201.146.49 "cat /etc/os-release"
+        - ssh vlad@84.201.146.49 'cat /etc/os-release'
+        - ssh vlad@84.201.146.49 "echo $CI_COMMIT_SHORT_SHA $USER"
+        - ssh vlad@84.201.146.49 'echo $CI_COMMIT_SHORT_SHA $USER'
+
+
+
+
+.explore_test:
+    stage: test
+    before_script: []
+    script:
+        - echo $ARTIFACT_NAME
+        - echo $VAR2

@@ -1,0 +1,26 @@
+image: docker:latest
+stages:
+    - build 
+    - test
+    - deploy
+    - stop
+
+services:
+    - docker:dind
+    - postgres:latest
+    - redis:latest
+
+
+explore_runner:
+    stage: build
+    variables:
+        RUN_SCRIPT_NAME: run_${CI_COMMIT_BRANCH}.sh
+        OUTLINE_VARIABLE_NAME_COMMAND: "echo VAR_${CI_COMMIT_REF_SLUG} | tr 'a-z' 'A-Z'| sed 's/-/_/g'" 
+    before_script: []
+
+    script: 
+        - python3 --version || true
+        - docker --version || true
+        - docker ps
+
+export RUN_SCRIPT_NAME=$(echo $RUN_SCRIPT_NAME | tr 'A-Z' 'a-z' | sed 's/-/_/g')

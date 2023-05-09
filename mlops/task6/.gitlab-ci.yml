@@ -1,0 +1,74 @@
+image: ruby
+stages:
+  - get_secret_number
+  - build
+  - deploy
+
+get_secret:
+  stage: get_secret_number
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "TEST" || $CI_COMMIT_BRANCH == "PROD"'
+  before_script:
+    - echo "Configurate ssh connection to 65.108.144.165"
+    - 'which ssh-agent || ( apt-get install -qq openssh-client )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - 'echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$VM2_PRIVATE_KEY")
+    - export CI_COMMIT_BRANCH=$(echo $CI_COMMIT_BRANCH | tr 'A-Z' 'a-z' | sed 's/-/_/g')
+    - echo $CI_COMMIT_BRANCH
+  script:
+    - echo "Run secret_number image container on 65.108.144.165"
+    # - ssh root@65.108.144.165 "docker run -d --rm -p 5000:5000 waryak/karpov_courses:secret_ci_service"
+    - echo "Get secret_number"
+    - ssh root@65.108.144.165 "curl http://localhost:5000/get_secret_number/$CI_COMMIT_BRANCH | python3 get_secret_number.py > ./set_secret_number.sh"
+    - scp root@65.108.144.165:~/set_secret_number.sh ./
+  artifacts:
+    paths:
+      - ./set_secret_number.sh
+
+build_image:
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "TEST" || $CI_COMMIT_BRANCH == "PROD"'
+  before_script:
+    - echo "Configurate ssh connection to 135.181.204.59"
+    - 'which ssh-agent || ( apt-get install -qq openssh-client )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - 'echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$VM1_PRIVATE_KEY")
+  script:
+    - echo "Send project to 135.181.204.59"
+    - ssh root@135.181.204.59 "mkdir -p task6"
+    - scp Dockerfile root@135.181.204.59:~/task6/
+    - scp requirements.txt root@135.181.204.59:~/task6/
+    - scp -r src root@135.181.204.59:~/task6/
+    - echo "Build image on 135.181.204.59"
+    - ssh root@135.181.204.59 "docker build -t localhost:5000/web_app ~/task6"
+    - echo "Send image to localhost registry"
+    - ssh root@135.181.204.59 "docker push localhost:5000/web_app"
+  after_script:
+    - echo "Pull application image to swarm worker from registry"
+    - 'which ssh-agent || ( apt-get install -qq openssh-client )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - 'echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$VM2_PRIVATE_KEY")
+    - ssh root@65.108.144.165 "docker pull 135.181.204.59:5000/web_app"
+
+deploy-job:
+  stage: deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "TEST" || $CI_COMMIT_BRANCH == "PROD"'
+  before_script:
+    - echo "Configurate ssh connection to 135.181.204.59"
+    - 'which ssh-agent || ( apt-get install -qq openssh-client )'
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - 'echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$VM1_PRIVATE_KEY")
+    - source ./set_secret_number.sh
+  script:
+    - echo "Deploying application on swarm master node"
+    - ssh root@135.181.204.59 "docker service create -p 2000:2000 -e SECRET_NUMBER=$SECRET_NUMBER --name web_app 135.181.204.59:5000/web_app"
