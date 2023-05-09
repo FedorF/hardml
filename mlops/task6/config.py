@@ -1,0 +1,5 @@
+import os
+
+SECRET_NUMBER = os.environ['SECRET_NUMBER']
+FLASK_HOST = '0.0.0.0'
+FLASK_PORT = '2000'
